@@ -45,12 +45,13 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define MIDI_BASE_NOTE 21 //lowest midi note
 #define BASE_NOTE_FREQ 27.5
 #define VOLTS_PER_SEMITONE 1.0 / 12.0
-#define PWM_DAC_MULTIPLIER 0.12183
+#define PWM_DAC_MULTIPLIER 24.0 // note this gives a 16 bit value for pwm
 #define PITCH_BEND_FACTOR 1.0 / 65536.0; //adjust for desired pitch bend operation
 //MIDI variables
 int currentMidiNote; //the note currently being played
 int keysPressedArray[128] = {0}; //to keep track of which keys are pressed
 float midiControlVoltage; // represents midi note
+uint16_t pwmVal; //value for PWM with 16 bit precision, dither will be used to get average value close to this
 float bendControlVoltage = 0; // represents midi pitch bend
 uint32_t lfsr = 1; //32 bit LFSR, must be non-zero to start
 
@@ -104,7 +105,15 @@ SIGNAL(TIMER2_OVF_vect) {
   lfsr >>= 1;
   if (lsb) {
     lfsr ^= 0xA3000000u; // 32 bit version
-  }  
+  }
+  // set PWM using dither for better precision with low notes
+  uint8_t pwmSet = pwmVal >> 8; // whole part
+  uint8_t ditherByte = lfsr & 0xFF; // random dither
+  uint8_t pwmFrac = pwmVal & 0xFF; // fractional part of 16 bit value
+  if (pwmFrac > ditherByte) {
+    pwmSet += 1; // increase, ensure no overflow
+  }
+  OCR2B = pwmSet; // write to pwm register
 }
 
 void handleNoteOn(byte channel, byte pitch, byte velocity) { 
@@ -136,22 +145,13 @@ void handlePitchBend (byte channel, int bend) {
   updateNotePitch();
 }
 
-void oscSetPwm (float freqHz) {
-  // set PWM value according to note frequency, timer 2 channel B used for osc integrator drive
-  int pwm_val = round(PWM_DAC_MULTIPLIER * freqHz);
-  if (pwm_val > 255) {
-    pwm_val = 255;
-  }
-  OCR2B = pwm_val;
-}
-
 void updateNotePitch() {
   // update note pitch, taking into account midi note, midi pitchbend, analogue control
   float controlVoltage = midiControlVoltage + bendControlVoltage;
   float freqHz = BASE_NOTE_FREQ * pow(2.0, controlVoltage);  
   uint16_t timerSetting = round((1000000.0 / freqHz)-1.0);
   setTimer1(timerSetting);
-  oscSetPwm(freqHz);
+  pwmVal = int(PWM_DAC_MULTIPLIER * freqHz);
 }
 
 void setNotePitch(int note) {
