@@ -45,8 +45,8 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define MIDI_BASE_NOTE 21 //lowest midi note
 #define BASE_NOTE_FREQ 27.5
 #define VOLTS_PER_SEMITONE 1.0 / 12.0
-#define PWM_DAC_MULTIPLIER 24.0 // note this gives a 16 bit value for pwm
-#define PITCH_BEND_FACTOR 1.0 / 65536.0; //adjust for desired pitch bend operation
+#define PWM_DAC_MULTIPLIER 31.312 // note this gives a 16 bit value for pwm
+#define PITCH_BEND_FACTOR 1.0 / 32768.0; //adjust for desired pitch bend operation
 //MIDI variables
 int currentMidiNote; //the note currently being played
 int keysPressedArray[128] = {0}; //to keep track of which keys are pressed
@@ -151,7 +151,7 @@ void updateNotePitch() {
   float freqHz = BASE_NOTE_FREQ * pow(2.0, controlVoltage);  
   uint16_t timerSetting = round((1000000.0 / freqHz)-1.0);
   setTimer1(timerSetting);
-  pwmVal = int(PWM_DAC_MULTIPLIER * freqHz);
+  pwmVal = int(PWM_DAC_MULTIPLIER * freqHz) - 256;
 }
 
 void setNotePitch(int note) {
