@@ -45,7 +45,8 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define LFO_PWM OCR2A
 #define LFO_FREQ_PIN A1
 #define LFO_WAVE_PIN A0
-#define GATE_PIN 8 //gate control
+#define GATE_HIGH_PIN 8 //gate control, uses separate pins for attack/decay control
+#define GATE_LOW_PIN 10
 #define NOISE_PIN 7 //psuedo random noise output
 #define MIDI_BASE_NOTE 21 //lowest midi note
 #define BASE_NOTE_FREQ 27.5
@@ -90,6 +91,24 @@ void setTimer1(uint16_t val) {
   OCR1AL = val;
 }
 
+void setGate(bool onOff) {
+  // set gate on/off
+  //GATE_HIGH pin is driven high for note on, and tri-state (set to input) for note off
+  //GATE_LOW pin is tri-state for note on and driven low for not off
+  if (onOff) {
+    // note on
+    digitalWrite(GATE_HIGH_PIN, HIGH);
+    pinMode(GATE_LOW_PIN, INPUT); // tri-state
+    pinMode(GATE_HIGH_PIN, OUTPUT);
+  } else {
+    // note off
+    digitalWrite(GATE_LOW_PIN, LOW);
+    pinMode(GATE_HIGH_PIN, INPUT); // tri-state
+    digitalWrite(GATE_HIGH_PIN, LOW); //ensure internal pull up is off
+    pinMode(GATE_LOW_PIN, OUTPUT);
+  }
+}
+
 void setup() {
   //MIDI stuff
   // Initiate MIDI communications, listen to all channels
@@ -101,9 +120,7 @@ void setup() {
   // and also pitchbend, we can do that now we calculate the value on the fly
   MIDI.setHandlePitchBend(handlePitchBend); 
   pinMode(TIMER_PIN,OUTPUT);// OC1A output
-  pinMode(GATE_PIN,OUTPUT);
   pinMode(NOISE_PIN,OUTPUT);
-  digitalWrite(GATE_PIN,LOW);
   // timer 1 fast PWM mode 15, x8 prescaling
   TCCR1A = _BV(COM1A0) | _BV(WGM11) | _BV(WGM10);
   TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS11);
@@ -117,6 +134,7 @@ void setup() {
   TIMSK2 = _BV(TOIE2);
 
   setNotePitch(60); //middle C for test
+  setGate(false); //start with gate off
 }
 
 void getLfoParams() {
@@ -262,12 +280,12 @@ int findHighestKeyPressed(void) {
 void synthNoteOn(int note) {
   //starts playback of a note
   setNotePitch(note); //set the oscillator pitch
-  digitalWrite(GATE_PIN,HIGH); //turn gate on
+  setGate(true); // turn gate on
   currentMidiNote = note; //store the current note
 }
 
 void synthNoteOff(void) {
-  digitalWrite(GATE_PIN,LOW); //turn gate off
+  setGate(false);
 }
 
 
