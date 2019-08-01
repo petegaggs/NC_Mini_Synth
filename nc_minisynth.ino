@@ -1,5 +1,4 @@
 /*
- * Note this is work in progress, not finished yet
  * Numerically Controlled Mini-Synth, by Peter Gaggs
  * Based on the midi controlled oscillator project, this version is intended to 
  * be used in a self contained mini-synth design
@@ -8,7 +7,7 @@
  * runs on arduino 328p
  * note we use the timer directly, hence only use on 328p or 168p
  * needs arduino MIDI library
- * Also features Noise souce, LFO (not done yet)
+ * Also features Noise souce, LFO with 5 wave types, others to follow
  * 
  * MIT License
  * Copyright (c) 2019 petegaggs
@@ -52,6 +51,7 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define BASE_NOTE_FREQ 27.5
 #define VOLTS_PER_SEMITONE 1.0 / 12.0
 #define PWM_DAC_MULTIPLIER 31.312 // note this gives a 16 bit value for pwm
+#define PWM_BODGE 350 // why is this needed?
 #define PITCH_BEND_FACTOR 1.0 / 32768.0; //adjust for desired pitch bend operation
 //MIDI variables
 int currentMidiNote; //the note currently being played
@@ -142,17 +142,35 @@ void getLfoParams() {
   float lfoControlVoltage = float(analogRead(LFO_FREQ_PIN)) * float(10)/float(1024); //gives 10 octaves range 0.01Hz to 10Hz
   lfoTword_m = float(1369) * pow(2.0, lfoControlVoltage); //1369 sets the lowest frequency to 0.01Hz
   // read ADC to get the LFO wave type
-  int adcVal = analogRead(LFO_WAVE_PIN);
-  if (adcVal < 128) {
-    lfoWaveform = RAMP;
-  } else if (adcVal < 384) {
-    lfoWaveform = SAW;
-  } else if (adcVal < 640) {
-    lfoWaveform = TRI;
-  } else if (adcVal < 896) {
-    lfoWaveform = SINE;
-  } else {
-    lfoWaveform = SQR;
+  uint8_t adcVal = (analogRead(LFO_WAVE_PIN) >> 7) & 0x7; //top 3 bits of 10 bit value
+  switch (adcVal) {
+    case 0:
+      lfoWaveform = RAMP;
+      break;
+    case 1:
+      lfoWaveform = SAW;
+      break;
+    case 2:
+      lfoWaveform = TRI;
+      break;
+    case 3:
+      lfoWaveform = SINE;
+      break;
+    case 4:
+      lfoWaveform = SQR;
+      break;
+    case 5:
+      lfoWaveform = RAMP; // reserved for future use
+      break;
+    case 6:
+      lfoWaveform = SAW; // reserved for future use
+      break;
+    case 7:
+      lfoWaveform = TRI; // reserved for future use
+      break;
+    default:
+      lfoWaveform = RAMP;
+      break;
   }
 }
 
@@ -256,7 +274,7 @@ void updateNotePitch() {
   float freqHz = BASE_NOTE_FREQ * pow(2.0, controlVoltage);  
   uint16_t timerSetting = round((1000000.0 / freqHz)-1.0);
   setTimer1(timerSetting);
-  pwmVal = int(PWM_DAC_MULTIPLIER * freqHz) - 256;
+  pwmVal = int(PWM_DAC_MULTIPLIER * freqHz) - PWM_BODGE;
 }
 
 void setNotePitch(int note) {
